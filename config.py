@@ -22,15 +22,15 @@ random.seed(0)
 torch.manual_seed(0)
 np.random.seed(0)
 # Use GPU for training by default
-device = torch.device("cuda", 0)
+device = torch.device("cuda", 1)
 # Turning on when the image size does not change during training can speed up training
 cudnn.benchmark = True
 # Image magnification factor
-upscale_factor = 2
+upscale_factor = 4
 # Current configuration parameter method
 mode = "train"
 # Experiment name, easy to save weights and log files
-exp_name = "DBPN-RES-MR64-3_x2"
+exp_name = "DBPN-RES-MR64-3_x4"
 
 if mode == "train":
     # Dataset

@@ -57,6 +57,9 @@ class TrainValidImageDataset(Dataset):
         # Image processing operations
         if self.mode == "Train":
             hr_image = imgproc.random_crop(image, self.image_size)
+            hr_image = imgproc.random_rotate(hr_image, angles=[0, 90, 180, 270])
+            hr_image = imgproc.random_horizontally_flip(hr_image, p=0.5)
+            hr_image = imgproc.random_vertically_flip(hr_image, p=0.5)
         elif self.mode == "Valid":
             hr_image = imgproc.center_crop(image, self.image_size)
         else:
