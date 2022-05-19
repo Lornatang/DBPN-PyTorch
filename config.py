@@ -22,15 +22,17 @@ random.seed(0)
 torch.manual_seed(0)
 np.random.seed(0)
 # Use GPU for training by default
-device = torch.device("cuda", 1)
+device = torch.device("cuda", 0)
 # Turning on when the image size does not change during training can speed up training
 cudnn.benchmark = True
+# When evaluating the performance of the SR model, whether to verify only the Y channel image data
+only_test_y_channel = True
 # Image magnification factor
-upscale_factor = 4
+upscale_factor = 2
 # Current configuration parameter method
 mode = "train"
 # Experiment name, easy to save weights and log files
-exp_name = "DBPN-RES-MR64-3_x4"
+exp_name = "DBPN-RES-MR64-3_x2"
 
 if mode == "train":
     # Dataset
@@ -44,26 +46,26 @@ if mode == "train":
     num_workers = 4
 
     # Incremental training and migration training
-    start_epoch = 0
     resume = ""
 
     # Total num epochs
-    epochs = 333
+    epochs = 515
 
     # Adam optimizer parameter
     model_lr = 1e-4
     model_betas = (0.9, 0.999)
 
-    # StepLR scheduler parameter
+    # Dynamically adjust the learning rate policy
     lr_scheduler_step_size = epochs // 2
     lr_scheduler_gamma = 0.1
 
-    print_frequency = 100
+    # How many iterations to print the training result
+    print_frequency = 200
 
 if mode == "valid":
     # Test data address
     lr_dir = f"data/Set5/LRbicx{upscale_factor}"
     sr_dir = f"results/test/{exp_name}"
-    hr_dir = f"data/Set5/GTmod12"
+    hr_dir = f"data/Set5/GTmod8"
 
     model_path = f"results/{exp_name}/best.pth.tar"

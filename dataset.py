@@ -65,8 +65,8 @@ class TrainValidImageDataset(Dataset):
         else:
             raise ValueError("Unsupported data processing model, please use `Train` or `Valid`.")
 
-        lr_image = imgproc.imresize(hr_image, 1 / self.upscale_factor)
-        bic_image = imgproc.imresize(lr_image, self.upscale_factor)
+        lr_image = imgproc.image_resize(hr_image, 1 / self.upscale_factor)
+        bic_image = imgproc.image_resize(lr_image, self.upscale_factor)
 
         # BGR convert to RGB
         lr_image = cv2.cvtColor(lr_image, cv2.COLOR_BGR2RGB)
@@ -105,7 +105,7 @@ class TestImageDataset(Dataset):
     def __getitem__(self, batch_index: int) -> [torch.Tensor, torch.Tensor]:
         # Read a batch of image data
         lr_image = cv2.imread(self.lr_image_file_names[batch_index], cv2.IMREAD_UNCHANGED).astype(np.float32) / 255.
-        bic_image = imgproc.imresize(lr_image, self.upscale_factor)
+        bic_image = imgproc.image_resize(lr_image, self.upscale_factor)
         hr_image = cv2.imread(self.hr_image_file_names[batch_index], cv2.IMREAD_UNCHANGED).astype(np.float32) / 255.
 
         # BGR convert to RGB

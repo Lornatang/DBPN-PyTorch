@@ -174,17 +174,20 @@ class DBPN(nn.Module):
         self.down_block1 = DownBlock(64, kernel, stride, padding)
         self.up_block2 = UpBlock(64, kernel, stride, padding)
 
-        self.deep_up_block1 = DeepUpBlock(64, kernel, stride, padding, num_stage=2)
-        self.deep_up_block2 = DeepUpBlock(64, kernel, stride, padding, num_stage=3)
-        self.deep_up_block3 = DeepUpBlock(64, kernel, stride, padding, num_stage=4)
-        self.deep_up_block4 = DeepUpBlock(64, kernel, stride, padding, num_stage=5)
-        self.deep_up_block5 = DeepUpBlock(64, kernel, stride, padding, num_stage=6)
-
         self.deep_down_block1 = DeepDownBlock(64, kernel, stride, padding, num_stage=2)
+        self.deep_up_block1 = DeepUpBlock(64, kernel, stride, padding, num_stage=2)
+
         self.deep_down_block2 = DeepDownBlock(64, kernel, stride, padding, num_stage=3)
+        self.deep_up_block2 = DeepUpBlock(64, kernel, stride, padding, num_stage=3)
+
         self.deep_down_block3 = DeepDownBlock(64, kernel, stride, padding, num_stage=4)
+        self.deep_up_block3 = DeepUpBlock(64, kernel, stride, padding, num_stage=4)
+
         self.deep_down_block4 = DeepDownBlock(64, kernel, stride, padding, num_stage=5)
+        self.deep_up_block4 = DeepUpBlock(64, kernel, stride, padding, num_stage=5)
+
         self.deep_down_block5 = DeepDownBlock(64, kernel, stride, padding, num_stage=6)
+        self.deep_up_block5 = DeepUpBlock(64, kernel, stride, padding, num_stage=6)
 
         # Final output layer
         self.conv3 = nn.Conv2d(192, 3, (3, 3), (1, 1), (1, 1))

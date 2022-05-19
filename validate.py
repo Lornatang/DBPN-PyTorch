@@ -11,17 +11,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""File description: Realize the verification function after model training."""
 import os
 
 import cv2
-import imgproc
-import numpy as np
 import torch
 from natsort import natsorted
 
 import config
 import imgproc
+from image_quality_assessment import PSNR, SSIM
 from model import DBPN
 
 
@@ -45,8 +43,17 @@ def main() -> None:
     # Turn on half-precision inference.
     model.half()
 
-    # Initialize the image evaluation index.
-    total_psnr = 0.0
+    # Initialize the sharpness evaluation function
+    psnr = PSNR(config.upscale_factor, config.only_test_y_channel)
+    ssim = SSIM(config.upscale_factor, config.only_test_y_channel)
+
+    # Set the sharpness evaluation function calculation device to the specified model
+    psnr = psnr.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
+    ssim = ssim.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
+
+    # Initialize IQA metrics
+    psnr_metrics = 0.0
+    ssim_metrics = 0.0
 
     # Get a list of test image file names.
     file_names = natsorted(os.listdir(config.hr_dir))
@@ -58,23 +65,26 @@ def main() -> None:
         sr_image_path = os.path.join(config.sr_dir, file_names[index])
         hr_image_path = os.path.join(config.hr_dir, file_names[index])
 
-        print(f"Processing `{os.path.abspath(hr_image_path)}`...")
+        print(f"Processing `{os.path.abspath(lr_image_path)}`...")
         # Read LR image and HR image
-        lr_image = cv2.imread(lr_image_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 255.0
-        hr_image = cv2.imread(hr_image_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 255.0
-        bic_image = imgproc.imresize(lr_image, config.upscale_factor)
+        lr_image = cv2.imread(lr_image_path, cv2.IMREAD_UNCHANGED)
+        bic_image = imgproc.image_resize(lr_image, config.upscale_factor)
+        hr_image = cv2.imread(hr_image_path, cv2.IMREAD_UNCHANGED)
 
-        # Convert BGR image to Y image
-        hr_y_image = imgproc.bgr2ycbcr(hr_image, use_y_channel=True)
-
-        # Convert BGR image to RGB image
+        # Convert BGR channel image format data to RGB channel image format data
         lr_image = cv2.cvtColor(lr_image, cv2.COLOR_BGR2RGB)
         bic_image = cv2.cvtColor(bic_image, cv2.COLOR_BGR2RGB)
+        hr_image = cv2.cvtColor(hr_image, cv2.COLOR_BGR2RGB)
 
-        # Convert Y image data convert to Y tensor data
-        lr_tensor = imgproc.image2tensor(lr_image, range_norm=False, half=True).to(config.device).unsqueeze_(0)
-        bic_tensor = imgproc.image2tensor(bic_image, range_norm=False, half=True).to(config.device).unsqueeze_(0)
-        hr_y_tensor = imgproc.image2tensor(hr_y_image, range_norm=False, half=True).to(config.device).unsqueeze_(0)
+        # Convert RGB channel image format data to Tensor channel image format data
+        lr_tensor = imgproc.image2tensor(lr_image, range_norm=False, half=True).unsqueeze_(0)
+        bic_tensor = imgproc.image2tensor(bic_image, range_norm=False, half=True).unsqueeze_(0)
+        hr_tensor = imgproc.image2tensor(hr_image, range_norm=False, half=True).unsqueeze_(0)
+
+        # Transfer Tensor channel image format data to CUDA device
+        lr_tensor = lr_tensor.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
+        bic_tensor = bic_tensor.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
+        hr_tensor = hr_tensor.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
 
         # Only reconstruct the Y channel image data.
         with torch.no_grad():
@@ -85,14 +95,19 @@ def main() -> None:
         sr_image = cv2.cvtColor(sr_image, cv2.COLOR_RGB2BGR)
         cv2.imwrite(sr_image_path, sr_image)
 
-        # Cal PSNR
-        sr_image = sr_image.astype(np.float32) / 255.
-        sr_y_image = imgproc.bgr2ycbcr(sr_image, use_y_channel=True)
-        sr_y_tensor = imgproc.image2tensor(sr_y_image, range_norm=False, half=True).to(config.device).unsqueeze_(0)
+        # Cal IQA metrics
+        psnr_metrics += psnr(sr_tensor, hr_tensor).item()
+        ssim_metrics += ssim(sr_tensor, hr_tensor).item()
 
-        total_psnr += 10. * torch.log10(1. / torch.mean((sr_y_tensor - hr_y_tensor) ** 2))
+        # Calculate the average value of the sharpness evaluation index,
+        # and all index range values are cut according to the following values
+        # PSNR range value is 0~100
+        # SSIM range value is 0~1
+        avg_psnr = 100 if psnr_metrics / total_files > 100 else psnr_metrics / total_files
+        avg_ssim = 1 if ssim_metrics / total_files > 1 else ssim_metrics / total_files
 
-    print(f"PSNR: {total_psnr / total_files:4.2f}dB.\n")
+        print(f"PSNR: {avg_psnr:4.2f} dB\n"
+              f"SSIM: {avg_ssim:4.3f} u")
 
 
 if __name__ == "__main__":

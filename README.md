@@ -14,6 +14,7 @@ This repository contains an op-for-op PyTorch reimplementation of [Deep Back-Pro
     - [Download datasets](#download-datasets)
     - [Test](#test)
     - [Train](#train)
+    - [Resume train](#resume-train)
     - [Result](#result)
     - [Credit](#credit)
         - [Deep Back-Projection Networks for Super-Resolution](#deep-back-projection-networks-for-super-resolution)
@@ -45,25 +46,24 @@ Contains DIV2K, DIV8K, Flickr2K, OST, T91, Set5, Set14, BSDS100 and BSDS200, etc
 
 ## Test
 
-Modify the contents of the file as follows.
+Modify the contents of the `config.py` file as follows.
 
-- line 25: `upscale_factor` change to the magnification you need to enlarge.
-- line 27: `mode` change Set to valid mode.
-- line 66: `model_path` change weight address after training.
+- line 33: `upscale_factor` change to `2`.
+- line 35: `mode` change to `valid`.
+- line 71: `model_path` change to `results/pretrained_models/DBPN-RES-MR64-3_x2-DIV2K-e604aa23.pth.tar`.
 
 ## Train
 
-Modify the contents of the file as follows.
+Modify the contents of the `config.py` file as follows.
 
-- line 25: `upscale_factor` change to the magnification you need to enlarge.
-- line 27: `mode` change Set to train mode.
+- line 33: `upscale_factor` change to `2`.
+- line 35: `mode` change to `train`.
 
-If you want to load weights that you've trained before, modify the contents of the file as follows.
+## Resume train
 
-- line 41: `resume` change to `True`.
-- line 42: `strict` Transfer learning is set to `False`, incremental learning is set to `True`.
-- line 43: `start_epoch` change number of training iterations in the previous round.
-- line 44: `resume_weight` the weight address that needs to be loaded.
+If you want to load weights that you've trained before, modify the contents of the `config.py` file as follows.
+
+- line 41: `resume` change to `samples/DBPN-RES-MR64-3_x2/epoch_xxx.pth.tar`.
 
 ## Result
 
@@ -71,14 +71,15 @@ Source of original paper results: https://arxiv.org/pdf/1904.05677.pdf
 
 In the following table, the value in `()` indicates the result of the project, and `-` indicates no test.
 
-| Dataset | Scale |       PSNR       |
-|:-------:|:-----:|:----------------:|
-|  Set5   |   2   | 38.08(**37.94**) |
-|  Set5   |   4   |   32.65(**-**)   |
-|  Set5   |   8   |   27.51(**-**)   |
+| Method | Scale |      Set5 (PSNR/SSIM)      |      Set14(PSNR/SSIM)      |     BSD100(PSNR/SSIM)      |
+|:------:|:-----:|:--------------------------:|:--------------------------:|:--------------------------:|
+| D-DBPN |   2   | 38.27(**-**)/0.9616(**-**) | 34.28(**-**)/0.9231(**-**) | 32.47(**-**)/0.9032(**-**) |
+| D-DBPN |   3   | 34.78(**-**)/0.9303(**-**) | 30.73(**-**)/0.8488(**-**) | 29.36(**-**)/0.8117(**-**) |
+| D-DBPN |   4   | 32.63(**-**)/0.9002(**-**) | 28.94(**-**)/0.7900(**-**) | 27.83(**-**)/0.7444(**-**) |
+| D-DBPN |   8   | 27.36(**-**)/0.7882(**-**) | 25.34(**-**)/0.6531(**-**) | 25.01(**-**)/0.6057(**-**) |
 
 Low Resolution / Super Resolution / High Resolution
-<span align="center"><img src="assets/result.png"/></span>
+<span align="center"><img src="figure/result.png"/></span>
 
 ### Credit
 

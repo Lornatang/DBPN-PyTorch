@@ -17,7 +17,6 @@ import shutil
 import time
 from enum import Enum
 
-import numpy as np
 import torch
 from torch import nn
 from torch import optim
@@ -27,15 +26,16 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 import config
-import imgproc
 from dataset import CUDAPrefetcher
 from dataset import TrainValidImageDataset, TestImageDataset
+from image_quality_assessment import PSNR, SSIM
 from model import DBPN
 
 
 def main():
     # Initialize training to generate network evaluation indicators
     best_psnr = 0.0
+    best_ssim = 0.0
 
     train_prefetcher, valid_prefetcher, test_prefetcher = load_dataset()
     print("Load train dataset and valid dataset successfully.")
@@ -43,7 +43,7 @@ def main():
     model = build_model()
     print("Build DBPN model successfully.")
 
-    psnr_criterion, pixel_criterion = define_loss()
+    pixel_criterion = define_loss()
     print("Define all loss functions successfully.")
 
     optimizer = define_optimizer(model)
@@ -59,6 +59,7 @@ def main():
         # Restore the parameters in the training node to this point
         config.start_epoch = checkpoint["epoch"]
         best_psnr = checkpoint["best_psnr"]
+        best_ssim = checkpoint["best_ssim"]
         # Load checkpoint state dict. Extract the fitted model weights
         model_state_dict = model.state_dict()
         new_state_dict = {k: v for k, v in checkpoint["state_dict"].items() if k in model_state_dict}
@@ -85,28 +86,40 @@ def main():
     # Initialize the gradient scaler
     scaler = amp.GradScaler()
 
+    # Create an IQA evaluation model
+    psnr_model = PSNR(config.upscale_factor, config.only_test_y_channel)
+    ssim_model = SSIM(config.upscale_factor, config.only_test_y_channel)
+
+    # Transfer the IQA model to the specified device
+    psnr_model = psnr_model.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
+    ssim_model = ssim_model.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
+
     for epoch in range(config.start_epoch, config.epochs):
-        train(model, train_prefetcher, psnr_criterion, pixel_criterion, optimizer, epoch, scaler, writer)
-        _ = validate(model, valid_prefetcher, psnr_criterion, epoch, writer, "Valid")
-        psnr = validate(model, test_prefetcher, psnr_criterion, epoch, writer, "Test")
+        train(model, train_prefetcher, pixel_criterion, optimizer, epoch, scaler, writer)
+        _, _ = validate(model, valid_prefetcher, epoch, writer, psnr_model, ssim_model, "Valid")
+        psnr, ssim = validate(model, test_prefetcher, epoch, writer, psnr_model, ssim_model, "Test")
         print("\n")
 
         # Update lr
         scheduler.step()
 
         # Automatically save the model with the highest index
-        is_best = psnr > best_psnr
+        is_best = psnr > best_psnr and ssim > best_ssim
         best_psnr = max(psnr, best_psnr)
+        best_ssim = max(ssim, best_ssim)
         torch.save({"epoch": epoch + 1,
                     "best_psnr": best_psnr,
+                    "best_ssim": best_ssim,
                     "state_dict": model.state_dict(),
                     "optimizer": optimizer.state_dict(),
                     "scheduler": scheduler.state_dict()},
                    os.path.join(samples_dir, f"epoch_{epoch + 1}.pth.tar"))
         if is_best:
-            shutil.copyfile(os.path.join(samples_dir, f"epoch_{epoch + 1}.pth.tar"), os.path.join(results_dir, "best.pth.tar"))
+            shutil.copyfile(os.path.join(samples_dir, f"epoch_{epoch + 1}.pth.tar"),
+                            os.path.join(results_dir, "best.pth.tar"))
         if (epoch + 1) == config.epochs:
-            shutil.copyfile(os.path.join(samples_dir, f"epoch_{epoch + 1}.pth.tar"), os.path.join(results_dir, "last.pth.tar"))
+            shutil.copyfile(os.path.join(samples_dir, f"epoch_{epoch + 1}.pth.tar"),
+                            os.path.join(results_dir, "last.pth.tar"))
 
 
 def load_dataset() -> [CUDAPrefetcher, CUDAPrefetcher, CUDAPrefetcher]:
@@ -147,16 +160,17 @@ def load_dataset() -> [CUDAPrefetcher, CUDAPrefetcher, CUDAPrefetcher]:
 
 
 def build_model() -> nn.Module:
-    model = DBPN(upscale_factor=config.upscale_factor).to(config.device)
+    model = DBPN(upscale_factor=config.upscale_factor)
+    model = model.to(device=config.device, memory_format=torch.channels_last)
 
     return model
 
 
-def define_loss() -> [nn.MSELoss, nn.L1Loss]:
-    psnr_criterion = nn.MSELoss().to(config.device)
-    pixel_criterion = nn.L1Loss().to(config.device)
+def define_loss() -> [nn.L1Loss]:
+    pixel_criterion = nn.L1Loss()
+    pixel_criterion = pixel_criterion.to(device=config.device, memory_format=torch.channels_last)
 
-    return psnr_criterion, pixel_criterion
+    return pixel_criterion
 
 
 def define_optimizer(model) -> optim.Adam:
@@ -171,35 +185,55 @@ def define_scheduler(optimizer) -> lr_scheduler.StepLR:
     return scheduler
 
 
-def train(model, train_prefetcher, psnr_criterion, pixel_criterion, optimizer, epoch, scaler, writer) -> None:
-    # Calculate how many iterations there are under epoch
-    batches = len(train_prefetcher)
+def train(model: nn.Module,
+          train_prefetcher: CUDAPrefetcher,
+          pixel_criterion: nn.L1Loss,
+          optimizer: optim.Adam,
+          epoch: int,
+          scaler: amp.GradScaler,
+          writer: SummaryWriter) -> None:
+    """Training main program
 
+    Args:
+        model (nn.Module): the generator model in the generative network
+        train_prefetcher (CUDAPrefetcher): training dataset iterator
+        pixel_criterion (nn.L1Loss): Calculate the pixel difference between real and fake samples
+        optimizer (optim.Adam): optimizer for optimizing generator models in generative networks
+        epoch (int): number of training epochs during training the generative network
+        scaler (amp.GradScaler): Mixed precision training function
+        writer (SummaryWrite): log file management function
+
+    """
+    batches = len(train_prefetcher)
+    # Print information of progress bar during training
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
     losses = AverageMeter("Loss", ":6.6f")
-    psnres = AverageMeter("PSNR", ":4.2f")
-    progress = ProgressMeter(batches, [batch_time, data_time, losses, psnres], prefix=f"Epoch: [{epoch + 1}]")
+    progress = ProgressMeter(batches, [batch_time, data_time, losses], prefix=f"Epoch: [{epoch + 1}]")
 
-    # Put the generator in training mode
+    # Put the generative network model in training mode
     model.train()
 
+    # Initialize the number of data batches to print logs on the terminal
     batch_index = 0
 
-    # Calculate the time it takes to test a batch of data
-    end = time.time()
-    # enable preload
+    # Initialize the data loader and load the first batch of data
     train_prefetcher.reset()
     batch_data = train_prefetcher.next()
+
+    # Get the initialization training time
+    end = time.time()
+
     while batch_data is not None:
-        # measure data loading time
+        # Calculate the time it takes to load a batch of data
         data_time.update(time.time() - end)
 
+        # Transfer in-memory data to CUDA devices to speed up training
         lr = batch_data["lr"].to(config.device, non_blocking=True)
         bic = batch_data["bic"].to(config.device, non_blocking=True)
         hr = batch_data["hr"].to(config.device, non_blocking=True)
 
-        # Initialize the generator gradient
+        # Initialize generator gradients
         model.zero_grad()
 
         # Mixed precision training
@@ -207,16 +241,14 @@ def train(model, train_prefetcher, psnr_criterion, pixel_criterion, optimizer, e
             sr = model(lr) + bic
             loss = pixel_criterion(sr, hr)
 
-        # Gradient zoom
+        # Backpropagation
         scaler.scale(loss).backward()
-        # Update generator weight
+        # update generator weights
         scaler.step(optimizer)
         scaler.update()
 
-        # measure accuracy and record loss
-        psnr = 10. * torch.log10(1. / psnr_criterion(sr, hr))
+        # Statistical loss value for terminal data output
         losses.update(loss.item(), lr.size(0))
-        psnres.update(psnr.item(), lr.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -235,25 +267,48 @@ def train(model, train_prefetcher, psnr_criterion, pixel_criterion, optimizer, e
         batch_index += 1
 
 
-def validate(model, valid_prefetcher, psnr_criterion, epoch, writer, mode) -> float:
+def validate(model: nn.Module,
+             data_prefetcher: CUDAPrefetcher,
+             epoch: int,
+             writer: SummaryWriter,
+             psnr_model: nn.Module,
+             ssim_model: nn.Module,
+             mode: str) -> [float, float]:
+    """Test main program
+
+    Args:
+        model (nn.Module): generator model in adversarial networks
+        data_prefetcher (CUDAPrefetcher): test dataset iterator
+        epoch (int): number of test epochs during training of the adversarial network
+        writer (SummaryWriter): log file management function
+        psnr_model (nn.Module): The model used to calculate the PSNR function
+        ssim_model (nn.Module): The model used to compute the SSIM function
+        mode (str): test validation dataset accuracy or test dataset accuracy
+
+    """
+    # Calculate how many batches of data are in each Epoch
+    batches = len(data_prefetcher)
     batch_time = AverageMeter("Time", ":6.3f")
     psnres = AverageMeter("PSNR", ":4.2f")
-    progress = ProgressMeter(len(valid_prefetcher), [batch_time, psnres], prefix="Valid: ")
+    ssimes = AverageMeter("SSIM", ":4.4f")
+    progress = ProgressMeter(len(data_prefetcher), [batch_time, psnres, ssimes], prefix=f"{mode}: ")
 
-    # Put the model in verification mode
+    # Put the adversarial network model in validation mode
     model.eval()
 
+    # Initialize the number of data batches to print logs on the terminal
     batch_index = 0
 
-    # Calculate the time it takes to test a batch of data
-    end = time.time()
-    with torch.no_grad():
-        # enable preload
-        valid_prefetcher.reset()
-        batch_data = valid_prefetcher.next()
+    # Initialize the data loader and load the first batch of data
+    data_prefetcher.reset()
+    batch_data = data_prefetcher.next()
 
+    # Get the initialization test time
+    end = time.time()
+
+    with torch.no_grad():
         while batch_data is not None:
-            # measure data loading time
+            # Transfer the in-memory data to the CUDA device to speed up the test
             lr = batch_data["lr"].to(config.device, non_blocking=True)
             bic = batch_data["bic"].to(config.device, non_blocking=True)
             hr = batch_data["hr"].to(config.device, non_blocking=True)
@@ -262,46 +317,37 @@ def validate(model, valid_prefetcher, psnr_criterion, epoch, writer, mode) -> fl
             with amp.autocast():
                 sr = model(lr) + bic
 
-            # Convert RGB tensor to Y tensor
-            sr_image = imgproc.tensor2image(sr, range_norm=False, half=True)
-            sr_image = sr_image.astype(np.float32) / 255.
-            sr_y_image = imgproc.rgb2ycbcr(sr_image, use_y_channel=True)
-            sr_y_tensor = imgproc.image2tensor(sr_y_image, range_norm=False, half=True).to(config.device).unsqueeze_(0)
-
-            hr_image = imgproc.tensor2image(hr, range_norm=False, half=True)
-            hr_image = hr_image.astype(np.float32) / 255.
-            hr_y_image = imgproc.rgb2ycbcr(hr_image, use_y_channel=True)
-            hr_y_tensor = imgproc.image2tensor(hr_y_image, range_norm=False, half=True).to(config.device).unsqueeze_(0)
-
-            # measure accuracy and record loss
-            psnr = 10. * torch.log10(1. / psnr_criterion(sr_y_tensor, hr_y_tensor))
+            # Statistical loss value for terminal data output
+            psnr = psnr_model(sr, hr)
+            ssim = ssim_model(sr, hr)
             psnres.update(psnr.item(), lr.size(0))
+            ssimes.update(ssim.item(), lr.size(0))
 
-            # measure elapsed time
+            # Calculate the time it takes to fully test a batch of data
             batch_time.update(time.time() - end)
             end = time.time()
 
             # Record training log information
-            if batch_index % config.print_frequency == 0:
+            if batch_index % (batches // 5) == 0:
                 progress.display(batch_index)
 
             # Preload the next batch of data
-            batch_data = valid_prefetcher.next()
+            batch_data = data_prefetcher.next()
 
-            # After a batch of data is calculated, add 1 to the number of batches
+            # After training a batch of data, add 1 to the number of data batches to ensure that the
+            # terminal prints data normally
             batch_index += 1
 
-    # Print average PSNR metrics
-    progress.display_summary()
+        # print metrics
+        progress.display_summary()
 
-    if mode == "Valid":
-        writer.add_scalar("Valid/PSNR", psnres.avg, epoch + 1)
-    elif mode == "Test":
-        writer.add_scalar("Test/PSNR", psnres.avg, epoch + 1)
-    else:
-        raise ValueError("Unsupported mode, please use `Valid` or `Test`.")
+        if mode == "Valid" or mode == "Test":
+            writer.add_scalar(f"{mode}/PSNR", psnres.avg, epoch + 1)
+            writer.add_scalar(f"{mode}/SSIM", psnres.avg, epoch + 1)
+        else:
+            raise ValueError("Unsupported mode, please use `Valid` or `Test`.")
 
-    return psnres.avg
+        return psnres.avg, ssimes.avg
 
 
 # Copy form "https://github.com/pytorch/examples/blob/master/imagenet/main.py"
