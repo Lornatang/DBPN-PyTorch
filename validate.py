@@ -99,15 +99,15 @@ def main() -> None:
         psnr_metrics += psnr(sr_tensor, hr_tensor).item()
         ssim_metrics += ssim(sr_tensor, hr_tensor).item()
 
-        # Calculate the average value of the sharpness evaluation index,
-        # and all index range values are cut according to the following values
-        # PSNR range value is 0~100
-        # SSIM range value is 0~1
-        avg_psnr = 100 if psnr_metrics / total_files > 100 else psnr_metrics / total_files
-        avg_ssim = 1 if ssim_metrics / total_files > 1 else ssim_metrics / total_files
+    # Calculate the average value of the sharpness evaluation index,
+    # and all index range values are cut according to the following values
+    # PSNR range value is 0~100
+    # SSIM range value is 0~1
+    avg_psnr = 100 if psnr_metrics / total_files > 100 else psnr_metrics / total_files
+    avg_ssim = 1 if ssim_metrics / total_files > 1 else ssim_metrics / total_files
 
-        print(f"PSNR: {avg_psnr:4.2f} dB\n"
-              f"SSIM: {avg_ssim:4.3f} u")
+    print(f"PSNR: {avg_psnr:4.2f} dB\n"
+          f"SSIM: {avg_ssim:4.3f} u")
 
 
 if __name__ == "__main__":
