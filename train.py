@@ -71,6 +71,8 @@ def main():
         # Load the scheduler model
         scheduler.load_state_dict(checkpoint["scheduler"])
         print("Loaded pretrained model weights.")
+    else:
+        config.start_epoch = 0
 
     # Create a folder of super-resolution experiment results
     samples_dir = os.path.join("samples", config.exp_name)
