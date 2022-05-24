@@ -12,9 +12,10 @@ This repository contains an op-for-op PyTorch reimplementation of [Deep Back-Pro
     - [About Deep Back-Projection Networks for Super-Resolution](#about-deep-back-projection-networks-for-super-resolution)
     - [Download weights](#download-weights)
     - [Download datasets](#download-datasets)
-    - [Test](#test)
-    - [Train](#train)
-    - [Resume train](#resume-train)
+    - [How Test and Train](#how-test-and-train)
+        - [Test](#test)
+        - [Train model](#train-model)
+        - [Resume train model](#resume-train-model)
     - [Result](#result)
     - [Credit](#credit)
         - [Deep Back-Projection Networks for Super-Resolution](#deep-back-projection-networks-for-super-resolution)
@@ -44,26 +45,28 @@ Contains DIV2K, DIV8K, Flickr2K, OST, T91, Set5, Set14, BSDS100 and BSDS200, etc
 - [Google Driver](https://drive.google.com/drive/folders/1A6lzGeQrFMxPqJehK9s37ce-tPDj20mD?usp=sharing)
 - [Baidu Driver](https://pan.baidu.com/s/1o-8Ty_7q6DiS3ykLU09IVg?pwd=llot)
 
-## Test
+## How Test and Train
 
-Modify the contents of the `config.py` file as follows.
+Both training and testing only need to modify the `config.py` file. 
 
-- line 33: `upscale_factor` change to `2`.
-- line 35: `mode` change to `valid`.
-- line 71: `model_path` change to `results/pretrained_models/DBPN-RES-MR64-3_x2-DIV2K-e604aa23.pth.tar`.
+### Test
 
-## Train
+- line 31: `upscale_factor` change to `2`.
+- line 33: `mode` change to `valid`.
+- line 71: `model_path` change to `results/pretrained_models/DBPN-RES-MR64-3_x2-DIV2K-xxxxxxxx.pth.tar`.
 
-Modify the contents of the `config.py` file as follows.
+### Train model
 
-- line 33: `upscale_factor` change to `2`.
-- line 35: `mode` change to `train`.
+- line 31: `upscale_factor` change to `2`.
+- line 33: `mode` change to `train`.
+- line 35: `exp_name` change to `DBPN-RES-MR64-3_x2`.
 
-## Resume train
+### Resume train model
 
-If you want to load weights that you've trained before, modify the contents of the `config.py` file as follows.
-
-- line 41: `resume` change to `samples/DBPN-RES-MR64-3_x2/epoch_xxx.pth.tar`.
+- line 31: `upscale_factor` change to `2`.
+- line 33: `mode` change to `train`.
+- line 35: `exp_name` change to `DBPN-RES-MR64-3_x2`.
+- line 49: `resume` change to `samples/DBPN-RES-MR64-3_x2/epoch_xxx.pth.tar`.
 
 ## Result
 
