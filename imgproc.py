@@ -22,8 +22,8 @@ from torchvision.transforms import functional as F
 
 __all__ = [
     "image2tensor", "tensor2image",
-    "image_resize",
-    "expand_y", "rgb2ycbcr", "bgr2ycbcr", "ycbcr2bgr", "ycbcr2rgb",
+    "image_resize", "expand_y", "rgb2ycbcr", "bgr2ycbcr", "ycbcr2bgr", "ycbcr2rgb",
+    "rgb2ycbcr_torch", "bgr2ycbcr_torch",
     "center_crop", "random_crop", "random_rotate", "random_vertically_flip", "random_horizontally_flip",
 ]
 
@@ -84,7 +84,6 @@ def tensor2image(tensor: torch.Tensor, range_norm: bool, half: bool) -> Any:
     return image
 
 
-# Code reference `https://github.com/xinntao/BasicSR/blob/master/basicsr/utils/matlab_functions.py`
 def _cubic(x: Any) -> Any:
     """Implementation of `cubic` function in Matlab under Python language.
 
@@ -103,7 +102,6 @@ def _cubic(x: Any) -> Any:
                ((absx > 1) * (absx <= 2)).type_as(absx))
 
 
-# Code reference `https://github.com/xinntao/BasicSR/blob/master/basicsr/utils/matlab_functions.py`
 def _calculate_weights_indices(in_length: int,
                                out_length: int,
                                scale: float,
@@ -181,7 +179,6 @@ def _calculate_weights_indices(in_length: int,
     return weights, indices, int(sym_len_s), int(sym_len_e)
 
 
-# Code reference `https://github.com/xinntao/BasicSR/blob/master/basicsr/utils/matlab_functions.py`
 def image_resize(image: Any, scale_factor: float, antialiasing: bool = True) -> Any:
     """Implementation of `imresize` function in Matlab under Python language.
 
@@ -297,7 +294,6 @@ def expand_y(image: np.ndarray) -> np.ndarray:
     return y_image
 
 
-# Code reference `https://github.com/xinntao/BasicSR/blob/master/basicsr/utils/matlab_functions.py`
 def rgb2ycbcr(image: np.ndarray, only_use_y_channel: bool) -> np.ndarray:
     """Implementation of rgb2ycbcr function in Matlab under Python language
 
@@ -321,7 +317,6 @@ def rgb2ycbcr(image: np.ndarray, only_use_y_channel: bool) -> np.ndarray:
     return image
 
 
-# Code reference `https://github.com/xinntao/BasicSR/blob/master/basicsr/utils/matlab_functions.py`
 def bgr2ycbcr(image: np.ndarray, only_use_y_channel: bool) -> np.ndarray:
     """Implementation of bgr2ycbcr function in Matlab under Python language.
 
@@ -345,7 +340,6 @@ def bgr2ycbcr(image: np.ndarray, only_use_y_channel: bool) -> np.ndarray:
     return image
 
 
-# Code reference `https://github.com/xinntao/BasicSR/blob/master/basicsr/utils/matlab_functions.py`
 def ycbcr2rgb(image: np.ndarray) -> np.ndarray:
     """Implementation of ycbcr2rgb function in Matlab under Python language.
 
@@ -369,7 +363,6 @@ def ycbcr2rgb(image: np.ndarray) -> np.ndarray:
     return image
 
 
-# Code reference `https://github.com/xinntao/BasicSR/blob/master/basicsr/utils/matlab_functions.py`
 def ycbcr2bgr(image: np.ndarray) -> np.ndarray:
     """Implementation of ycbcr2bgr function in Matlab under Python language.
 

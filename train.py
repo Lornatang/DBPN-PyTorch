@@ -11,7 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""File description: Realize the model training function."""
 import os
 import shutil
 import time
@@ -33,6 +32,9 @@ from model import DBPN
 
 
 def main():
+    # Initialize the number of training epochs
+    start_epoch = 0
+
     # Initialize training to generate network evaluation indicators
     best_psnr = 0.0
     best_ssim = 0.0
@@ -57,7 +59,7 @@ def main():
         # Load checkpoint model
         checkpoint = torch.load(config.resume, map_location=lambda storage, loc: storage)
         # Restore the parameters in the training node to this point
-        config.start_epoch = checkpoint["epoch"]
+        start_epoch = checkpoint["epoch"]
         best_psnr = checkpoint["best_psnr"]
         best_ssim = checkpoint["best_ssim"]
         # Load checkpoint state dict. Extract the fitted model weights
@@ -96,7 +98,7 @@ def main():
     psnr_model = psnr_model.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
     ssim_model = ssim_model.to(device=config.device, memory_format=torch.channels_last, non_blocking=True)
 
-    for epoch in range(config.start_epoch, config.epochs):
+    for epoch in range(start_epoch, config.epochs):
         train(model, train_prefetcher, pixel_criterion, optimizer, epoch, scaler, writer)
         _, _ = validate(model, valid_prefetcher, epoch, writer, psnr_model, ssim_model, "Valid")
         psnr, ssim = validate(model, test_prefetcher, epoch, writer, psnr_model, ssim_model, "Test")
@@ -337,7 +339,7 @@ def validate(model: nn.Module,
             batch_data = data_prefetcher.next()
 
             # After training a batch of data, add 1 to the number of data batches to ensure that the
-            # terminal prints data normally
+            # terminal print data normally
             batch_index += 1
 
         # print metrics
@@ -345,14 +347,13 @@ def validate(model: nn.Module,
 
         if mode == "Valid" or mode == "Test":
             writer.add_scalar(f"{mode}/PSNR", psnres.avg, epoch + 1)
-            writer.add_scalar(f"{mode}/SSIM", psnres.avg, epoch + 1)
+            writer.add_scalar(f"{mode}/SSIM", ssimes.avg, epoch + 1)
         else:
             raise ValueError("Unsupported mode, please use `Valid` or `Test`.")
 
         return psnres.avg, ssimes.avg
 
 
-# Copy form "https://github.com/pytorch/examples/blob/master/imagenet/main.py"
 class Summary(Enum):
     NONE = 0
     AVERAGE = 1
@@ -361,8 +362,6 @@ class Summary(Enum):
 
 
 class AverageMeter(object):
-    """Computes and stores the average and current value"""
-
     def __init__(self, name, fmt=":f", summary_type=Summary.AVERAGE):
         self.name = name
         self.fmt = fmt

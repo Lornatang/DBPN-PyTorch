@@ -241,6 +241,7 @@ class DBPN(nn.Module):
         out = torch.cat(out, 1)
 
         out = self.conv3(out)
+        out = torch.clamp_(out, 0.0, 1.0)
 
         return out
 
